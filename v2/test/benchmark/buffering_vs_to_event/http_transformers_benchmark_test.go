@@ -20,7 +20,11 @@ var (
 	binaryHttpRequest       *nethttp.Request
 	binaryHttpRequestNoData *nethttp.Request
 
+	extraction   map[string]interface{}
 	transformers binding.TransformerFactories
+
+	ExtAValue interface{}
+	ExtBValue interface{}
 
 	ctx = context.TODO()
 )
@@ -28,6 +32,8 @@ var (
 func init() {
 	initialEvent := test.FullEvent()
 	initialEvent.SetExtension("key", "aaa")
+	initialEvent.SetExtension("extavalue", "aaaa")
+	initialEvent.SetExtension("extbvalue", "aaaa")
 
 	binaryHttpRequest, _ = nethttp.NewRequest("POST", "http://localhost", nil)
 	Err = http.WriteRequest(context.TODO(), binding.ToMessage(&initialEvent), binaryHttpRequest)
@@ -39,6 +45,8 @@ func init() {
 	initialEventNoData.DataEncoded = nil
 	initialEventNoData.SetDataContentType("")
 	initialEventNoData.SetExtension("key", "aaa")
+	initialEventNoData.SetExtension("extavalue", "aaaa")
+	initialEventNoData.SetExtension("extbvalue", "aaaa")
 
 	binaryHttpRequestNoData, _ = nethttp.NewRequest("POST", "http://localhost", nil)
 	Err = http.WriteRequest(context.TODO(), binding.ToMessage(&initialEventNoData), binaryHttpRequestNoData)
@@ -46,7 +54,7 @@ func init() {
 		panic(Err)
 	}
 
-	transformers = append(binding.TransformerFactories{},
+	transformers = append(transformers,
 		transformer.SetExtension("aaa", "AAAA", func(i2 interface{}) (interface{}, error) {
 			vStr, err := types.Format(i2)
 			if err != nil {
@@ -56,7 +64,7 @@ func init() {
 		})...,
 	)
 	transformers = append(transformers,
-		transformer.SetExtension("aTime", time.Now(), func(i2 interface{}) (interface{}, error) {
+		transformer.SetExtension("atime", time.Now(), func(i2 interface{}) (interface{}, error) {
 			vTime, err := types.ToTime(i2)
 			if err != nil {
 				return nil, err
@@ -64,6 +72,11 @@ func init() {
 			return vTime.Add(3 * time.Hour), nil
 		})...,
 	)
+	extraction = map[string]interface{}{
+		"extavalue": nil,
+		"extbvalue": nil,
+	}
+	transformers = append(transformers, transformer.ExtractExtensions(extraction))
 }
 
 var Req *nethttp.Request
@@ -104,6 +117,8 @@ func BenchmarkHttpWithBuffering(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		M = http.NewMessageFromHttpRequest(binaryHttpRequest)
 		M, Err = buffering.CopyMessage(ctx, M, transformers)
+		ExtAValue = extraction["extavalue"]
+		ExtBValue = extraction["extbvalue"]
 		if Err != nil {
 			panic(Err)
 		}
@@ -123,6 +138,8 @@ func BenchmarkHttpWithDirect(b *testing.B) {
 			panic(Err)
 		}
 		Err = http.WriteRequest(ctx, M, Req, transformers)
+		ExtAValue = extraction["extavalue"]
+		ExtBValue = extraction["extbvalue"]
 	}
 }
 
@@ -130,6 +147,8 @@ func BenchmarkNoDataHttpWithBuffering(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		M = http.NewMessageFromHttpRequest(binaryHttpRequestNoData)
 		M, Err = buffering.CopyMessage(ctx, M, transformers)
+		ExtAValue = extraction["extavalue"]
+		ExtBValue = extraction["extbvalue"]
 		if Err != nil {
 			panic(Err)
 		}
@@ -149,6 +168,8 @@ func BenchmarkNoDataHttpWithDirect(b *testing.B) {
 			panic(Err)
 		}
 		Err = http.WriteRequest(ctx, M, Req, transformers)
+		ExtAValue = extraction["extavalue"]
+		ExtBValue = extraction["extbvalue"]
 	}
 }
 
@@ -162,13 +183,15 @@ func transformEvent(e *event.Event) {
 	} else {
 		e.SetExtension("aaa", strings.ToUpper("AAA"))
 	}
-	if v, ok := e.Extensions()["aTime"]; ok {
+	if v, ok := e.Extensions()["atime"]; ok {
 		vTime, err := types.ToTime(v)
 		if err != nil {
 			panic(err)
 		}
-		e.SetExtension("aTime", vTime.Add(3*time.Hour))
+		e.SetExtension("atime", vTime.Add(3*time.Hour))
 	} else {
-		e.SetExtension("aTime", time.Now().UTC().Round(0))
+		e.SetExtension("atime", time.Now().UTC().Round(0))
 	}
+	ExtAValue = e.Extensions()["extavalue"]
+	ExtBValue = e.Extensions()["extbvalue"]
 }
