@@ -20,7 +20,8 @@ var (
 	binaryHttpRequest       *nethttp.Request
 	binaryHttpRequestNoData *nethttp.Request
 
-	extraction   map[string]interface{}
+	extractionA  transformer.ExtractExtension
+	extractionB  transformer.ExtractExtension
 	transformers binding.TransformerFactories
 
 	ExtAValue interface{}
@@ -72,11 +73,13 @@ func init() {
 			return vTime.Add(3 * time.Hour), nil
 		})...,
 	)
-	extraction = map[string]interface{}{
-		"extavalue": nil,
-		"extbvalue": nil,
+	extractionA = transformer.ExtractExtension{
+		Name: "extavalue",
 	}
-	transformers = append(transformers, transformer.ExtractExtensions(extraction))
+	extractionB = transformer.ExtractExtension{
+		Name: "extbvalue",
+	}
+	transformers = append(transformers, &extractionA, &extractionB)
 }
 
 var Req *nethttp.Request
@@ -117,8 +120,8 @@ func BenchmarkHttpWithBuffering(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		M = http.NewMessageFromHttpRequest(binaryHttpRequest)
 		M, Err = buffering.CopyMessage(ctx, M, transformers)
-		ExtAValue = extraction["extavalue"]
-		ExtBValue = extraction["extbvalue"]
+		ExtAValue = extractionA.Value
+		ExtBValue = extractionB.Value
 		if Err != nil {
 			panic(Err)
 		}
@@ -138,8 +141,8 @@ func BenchmarkHttpWithDirect(b *testing.B) {
 			panic(Err)
 		}
 		Err = http.WriteRequest(ctx, M, Req, transformers)
-		ExtAValue = extraction["extavalue"]
-		ExtBValue = extraction["extbvalue"]
+		ExtAValue = extractionA.Value
+		ExtBValue = extractionB.Value
 	}
 }
 
@@ -147,8 +150,8 @@ func BenchmarkNoDataHttpWithBuffering(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		M = http.NewMessageFromHttpRequest(binaryHttpRequestNoData)
 		M, Err = buffering.CopyMessage(ctx, M, transformers)
-		ExtAValue = extraction["extavalue"]
-		ExtBValue = extraction["extbvalue"]
+		ExtAValue = extractionA.Value
+		ExtBValue = extractionB.Value
 		if Err != nil {
 			panic(Err)
 		}
@@ -168,8 +171,8 @@ func BenchmarkNoDataHttpWithDirect(b *testing.B) {
 			panic(Err)
 		}
 		Err = http.WriteRequest(ctx, M, Req, transformers)
-		ExtAValue = extraction["extavalue"]
-		ExtBValue = extraction["extbvalue"]
+		ExtAValue = extractionA.Value
+		ExtBValue = extractionB.Value
 	}
 }
 
