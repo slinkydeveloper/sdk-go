@@ -34,7 +34,7 @@ type httpRequestWriter http.Request
 
 func (b *httpRequestWriter) SetStructuredEvent(ctx context.Context, format format.Format, event io.Reader) error {
 	b.Header.Set(ContentType, format.MediaType())
-	return b.setBody(event)
+	return setRequestBody((*http.Request)(b), event)
 }
 
 func (b *httpRequestWriter) Start(ctx context.Context) error {
@@ -46,36 +46,36 @@ func (b *httpRequestWriter) End(ctx context.Context) error {
 }
 
 func (b *httpRequestWriter) SetData(data io.Reader) error {
-	return b.setBody(data)
+	return setRequestBody((*http.Request)(b), data)
 }
 
 // setBody is a cherry-pick of the implementation in http.NewRequestWithContext
-func (b *httpRequestWriter) setBody(body io.Reader) error {
+func setRequestBody(req *http.Request, body io.Reader) error {
 	rc, ok := body.(io.ReadCloser)
 	if !ok && body != nil {
 		rc = ioutil.NopCloser(body)
 	}
-	b.Body = rc
+	req.Body = rc
 	if body != nil {
 		switch v := body.(type) {
 		case *bytes.Buffer:
-			b.ContentLength = int64(v.Len())
+			req.ContentLength = int64(v.Len())
 			buf := v.Bytes()
-			b.GetBody = func() (io.ReadCloser, error) {
+			req.GetBody = func() (io.ReadCloser, error) {
 				r := bytes.NewReader(buf)
 				return ioutil.NopCloser(r), nil
 			}
 		case *bytes.Reader:
-			b.ContentLength = int64(v.Len())
+			req.ContentLength = int64(v.Len())
 			snapshot := *v
-			b.GetBody = func() (io.ReadCloser, error) {
+			req.GetBody = func() (io.ReadCloser, error) {
 				r := snapshot
 				return ioutil.NopCloser(&r), nil
 			}
 		case *strings.Reader:
-			b.ContentLength = int64(v.Len())
+			req.ContentLength = int64(v.Len())
 			snapshot := *v
-			b.GetBody = func() (io.ReadCloser, error) {
+			req.GetBody = func() (io.ReadCloser, error) {
 				r := snapshot
 				return ioutil.NopCloser(&r), nil
 			}
@@ -94,9 +94,9 @@ func (b *httpRequestWriter) setBody(body io.Reader) error {
 		// so we use a well-known ReadCloser variable instead
 		// and have the http package also treat that sentinel
 		// variable to mean explicitly zero.
-		if b.GetBody != nil && b.ContentLength == 0 {
-			b.Body = http.NoBody
-			b.GetBody = func() (io.ReadCloser, error) { return http.NoBody, nil }
+		if req.GetBody != nil && req.ContentLength == 0 {
+			req.Body = http.NoBody
+			req.GetBody = func() (io.ReadCloser, error) { return http.NoBody, nil }
 		}
 	}
 	return nil
