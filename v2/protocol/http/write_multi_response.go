@@ -13,10 +13,6 @@ import (
 	"github.com/cloudevents/sdk-go/v2/types"
 )
 
-const (
-	MultipartCloudEvents = "multipart/cloudevents"
-)
-
 func WriteMultipartResponse(ctx context.Context, m binding.MultiMessage, status int, rw http.ResponseWriter, transformers ...binding.Transformer) error {
 	writer := multipart.NewWriter(rw)
 
@@ -40,6 +36,29 @@ func WriteMultipartResponse(ctx context.Context, m binding.MultiMessage, status 
 		singleMessage, err = m.Read()
 	}
 	return writer.Close()
+}
+
+func WriteJsonSeqResponse(ctx context.Context, m binding.MultiMessage, status int, rw http.ResponseWriter, transformers ...binding.Transformer) error {
+	// Let's first write the content type and the 200 status code
+	rw.Header().Set(ContentType, JsonSeqCloudEvents)
+	rw.WriteHeader(status)
+
+	// Now we can start writing the body
+	singleMessage, err := m.Read()
+	for err != io.EOF {
+		if err != nil {
+			return err
+		}
+
+		// Now I have a single message and i can reuse the usual write
+		jsonSeqWriter := JsonSeqWriter{writer: rw}
+		_, writeErr := binding.Write(ctx, singleMessage, &jsonSeqWriter, nil, transformers...)
+		if writeErr != nil {
+			return writeErr
+		}
+		singleMessage, err = m.Read()
+	}
+	return nil
 }
 
 func multipartContentType(boundary string) string {

@@ -9,8 +9,18 @@ import (
 	"github.com/cloudevents/sdk-go/v2/binding"
 )
 
-type MultiMessage struct {
+const (
+	MultipartCloudEvents = "multipart/cloudevents"
+	JsonSeqCloudEvents   = "application/cloudevents-stream"
+)
+
+type MultipartMultiMessage struct {
 	reader     *multipart.Reader
+	bodyCloser io.Closer
+}
+
+type JsonStreamingMultiMessage struct {
+	reader     *JsonSeqReader
 	bodyCloser io.Closer
 }
 
@@ -24,8 +34,14 @@ func NewMultiMessageFromHttpRequest(req *http.Request) (binding.MultiMessage, er
 		return nil, err
 	}
 	if contentType == MultipartCloudEvents {
-		return &MultiMessage{
+		return &MultipartMultiMessage{
 			reader:     multipart.NewReader(req.Body, param["boundary"]),
+			bodyCloser: req.Body,
+		}, nil
+	}
+	if contentType == JsonSeqCloudEvents {
+		return &JsonStreamingMultiMessage{
+			reader:     NewJsonSeqReader(req.Body),
 			bodyCloser: req.Body,
 		}, nil
 	}
@@ -42,15 +58,21 @@ func NewMultiMessageFromHttpResponse(res *http.Response) (binding.MultiMessage, 
 		return nil, err
 	}
 	if contentType == MultipartCloudEvents {
-		return &MultiMessage{
+		return &MultipartMultiMessage{
 			reader:     multipart.NewReader(res.Body, param["boundary"]),
+			bodyCloser: res.Body,
+		}, nil
+	}
+	if contentType == JsonSeqCloudEvents {
+		return &JsonStreamingMultiMessage{
+			reader:     NewJsonSeqReader(res.Body),
 			bodyCloser: res.Body,
 		}, nil
 	}
 	return nil, binding.ErrUnknownEncoding
 }
 
-func (m *MultiMessage) Read() (binding.Message, error) {
+func (m *MultipartMultiMessage) Read() (binding.Message, error) {
 	p, err := m.reader.NextPart()
 	if err != nil {
 		return nil, err
@@ -58,6 +80,14 @@ func (m *MultiMessage) Read() (binding.Message, error) {
 	return NewMessage(http.Header(p.Header), p), nil
 }
 
-func (m *MultiMessage) Finish(error) error {
+func (m *MultipartMultiMessage) Finish(error) error {
 	return m.bodyCloser.Close()
+}
+
+func (j *JsonStreamingMultiMessage) Read() (binding.Message, error) {
+	return j.reader.ReadNext()
+}
+
+func (j *JsonStreamingMultiMessage) Finish(err error) error {
+	return j.bodyCloser.Close()
 }

@@ -28,4 +28,5 @@ require (
 	github.com/gorilla/mux v1.7.3
 	github.com/kelseyhightower/envconfig v1.4.0
 	go.opencensus.io v0.22.3
+	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
 )
